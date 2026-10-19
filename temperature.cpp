@@ -18,7 +18,7 @@ const char* CHAT_ID = "8541973510";
 // ===== GOOGLE APPS SCRIPT =====
 // Incolla qui l'URL della Web app che termina con /exec
 const char* SHEETS_URL =
-  "INCOLLA_QUI_URL_WEB_APP";
+  "https://script.google.com/macros/s/AKfycbyeJfKY4ic5hzfrIpNv2Npys0INniM9bzgRlFpTKAIS6iaOYkdgCZJpNtcFoqc6a3Xb/exec";
 
 // ===== PIN =====
 #define DHT_PIN 4
