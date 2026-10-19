@@ -12,7 +12,7 @@ const char* WIFI_SSID = "r4wns";
 const char* WIFI_PASSWORD = "qwzqwzqwz";
 
 // ===== CONFIGURAZIONE TELEGRAM =====
-const char* BOT_TOKEN = "8541973510:AAGAgvzBGM0AMNVVVZ7wLEJtVaRD3DwyP1w";
+const char* BOT_TOKEN = "8541973510:AAGuhmw8xdyUs-qMHrpL50nYG7QiKqczFQQ";
 const char* CHAT_ID = "8541973510";
 
 // ===== GOOGLE APPS SCRIPT =====
