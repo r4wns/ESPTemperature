@@ -1,0 +1,231 @@
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <DHT.h>
+#include <time.h>
+
+// ===== CONFIGURAZIONE WIFI =====
+const char* WIFI_SSID = "NOME_WIFI";
+const char* WIFI_PASSWORD = "PASSWORD_WIFI";
+
+// ===== CONFIGURAZIONE TELEGRAM =====
+const char* BOT_TOKEN = "INSERISCI_TOKEN_BOT";
+const char* CHAT_ID = "INSERISCI_CHAT_ID";
+
+// ===== GOOGLE APPS SCRIPT =====
+// Incolla qui l'URL della Web app che termina con /exec
+const char* SHEETS_URL =
+  "INCOLLA_QUI_URL_WEB_APP";
+
+// ===== PIN =====
+#define DHT_PIN 4
+#define DHT_TYPE DHT22
+#define LED_PIN 18
+
+// ===== IMPOSTAZIONI =====
+const float SOGLIA = 30.0;
+const unsigned long INTERVALLO = 300000UL; // 5 minuti
+
+DHT dht(DHT_PIN, DHT_TYPE);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+unsigned long ultimaMisura = 0;
+bool allarmePrecedente = false;
+
+// Codifica i caratteri speciali per gli URL
+String urlEncode(const String& testo) {
+  String risultato = "";
+  const char hex[] = "0123456789ABCDEF";
+
+  for (size_t i = 0; i < testo.length(); i++) {
+    uint8_t c = (uint8_t)testo[i];
+
+    if ((c >= 'a' && c <= 'z') ||
+        (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') ||
+        c == '-' || c == '_' ||
+        c == '.' || c == '~') {
+      risultato += (char)c;
+    } else {
+      risultato += '%';
+      risultato += hex[c >> 4];
+      risultato += hex[c & 0x0F];
+    }
+  }
+
+  return risultato;
+}
+
+String dataOra() {
+  struct tm info;
+
+  if (getLocalTime(&info, 2000)) {
+    char buffer[25];
+    strftime(buffer, sizeof(buffer),
+             "%Y-%m-%d %H:%M:%S", &info);
+    return String(buffer);
+  }
+
+  return "orario_non_disponibile";
+}
+
+bool inviaTelegram(const String& messaggio) {
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+
+  String url = String("https://api.telegram.org/bot") +
+               BOT_TOKEN +
+               "/sendMessage?chat_id=" +
+               CHAT_ID +
+               "&text=" + urlEncode(messaggio);
+
+  if (!http.begin(client, url)) {
+    return false;
+  }
+
+  int codice = http.GET();
+  http.end();
+
+  Serial.printf("Telegram HTTP: %d\n", codice);
+  return codice >= 200 && codice < 300;
+}
+
+bool salvaGoogleSheets(float temperatura,
+                       const String& timestamp) {
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+  String url = String(SHEETS_URL) +
+               "?temp=" + String(temperatura, 1) +
+               "&threshold=" + String(SOGLIA, 1) +
+               "&time=" + urlEncode(timestamp);
+
+  if (!http.begin(client, url)) {
+    return false;
+  }
+
+  int codice = http.GET();
+  String risposta = http.getString();
+  http.end();
+
+  Serial.printf("Sheets HTTP: %d | %s\n",
+                codice, risposta.c_str());
+
+  return codice >= 200 && codice < 300;
+}
+
+void misuraTemperatura() {
+  float temperatura = dht.readTemperature();
+
+  if (isnan(temperatura)) {
+    Serial.println("Errore: lettura DHT22 non valida");
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Errore sensore");
+    return;
+  }
+
+  String timestamp = dataOra();
+  bool allarme = temperatura >= SOGLIA;
+
+  digitalWrite(LED_PIN, allarme ? HIGH : LOW);
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Temp: ");
+  lcd.print(temperatura, 1);
+  lcd.write((uint8_t)223);
+  lcd.print("C");
+
+  lcd.setCursor(0, 1);
+  lcd.print(allarme ? "ALLARME >=30 C" : "Stato: NORMALE");
+
+  Serial.printf("%s | Temperatura: %.1f C\n",
+                timestamp.c_str(), temperatura);
+
+  // Registra ogni lettura valida
+  if (WiFi.status() == WL_CONNECTED) {
+    salvaGoogleSheets(temperatura, timestamp);
+
+    // Invia Telegram soltanto all'ingresso in allarme
+    if (allarme && !allarmePrecedente) {
+      String messaggio =
+        "ALLARME TEMPERATURA!\nTemperatura: " +
+        String(temperatura, 1) +
+        " C\nSoglia: " + String(SOGLIA, 1) +
+        " C\nData e ora: " + timestamp;
+
+      inviaTelegram(messaggio);
+    }
+  }
+
+  // Evita notifiche ripetute finché l'allarme resta attivo
+  allarmePrecedente = allarme;
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
+  Wire.begin(21, 22);
+  lcd.init();
+  lcd.backlight();
+
+  lcd.setCursor(0, 0);
+  lcd.print("Monitoraggio");
+  lcd.setCursor(0, 1);
+  lcd.print("Temperatura");
+
+  dht.begin();
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  lcd.clear();
+  lcd.print("Connessione WiFi");
+
+  Serial.print("Connessione WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("\nWiFi connesso!");
+  Serial.println(WiFi.localIP());
+
+  // Fuso orario Italia: CET/CEST con ora legale automatica
+  configTzTime("CET-1CEST,M3.5.0/2,M10.5.0/3",
+               "pool.ntp.org", "time.google.com");
+
+  lcd.clear();
+  lcd.print("WiFi connesso");
+  delay(1000);
+
+  // Prima misura subito, poi ogni 5 minuti
+  misuraTemperatura();
+  ultimaMisura = millis();
+}
+
+void loop() {
+  if (WiFi.status() != WL_CONNECTED) {
+    WiFi.reconnect();
+  }
+
+  if (millis() - ultimaMisura >= INTERVALLO) {
+    ultimaMisura = millis();
+    misuraTemperatura();
+  }
+
+  delay(100);
+}
