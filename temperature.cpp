@@ -8,12 +8,12 @@
 #include <time.h>
 
 // ===== CONFIGURAZIONE WIFI =====
-const char* WIFI_SSID = "NOME_WIFI";
-const char* WIFI_PASSWORD = "PASSWORD_WIFI";
+const char* WIFI_SSID = "r4wns";
+const char* WIFI_PASSWORD = "qwzqwzqwz";
 
 // ===== CONFIGURAZIONE TELEGRAM =====
-const char* BOT_TOKEN = "INSERISCI_TOKEN_BOT";
-const char* CHAT_ID = "INSERISCI_CHAT_ID";
+const char* BOT_TOKEN = "8541973510:AAGAgvzBGM0AMNVVVZ7wLEJtVaRD3DwyP1w";
+const char* CHAT_ID = "8541973510";
 
 // ===== GOOGLE APPS SCRIPT =====
 // Incolla qui l'URL della Web app che termina con /exec
